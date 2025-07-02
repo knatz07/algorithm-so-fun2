@@ -521,36 +521,45 @@ function setupDragAndDrop() {
     const dropZones = document.querySelectorAll('.drop-zone');
 
     draggables.forEach(draggable => {
-        // Mobile click support - ปรับปรุงให้ทำงานง่ายขึ้น
+        // Clear all previous event listeners
+        draggable.replaceWith(draggable.cloneNode(true));
+    });
+    
+    // Re-get elements after cloning
+    const newDraggables = document.querySelectorAll('.draggable');
+    
+    newDraggables.forEach(draggable => {
+        // Mobile click support
         draggable.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
 
-            // ตรวจสอบว่าเป็นการคลิกบนมือถือหรือไม่
-            const isMobile = window.innerWidth <= 768;
+            // สำหรับมือถือ: ถ้ายังไม่มีตัวที่เลือก ให้เลือกตัวนี้
+            if (!selectedForMove) {
+                selectedForMove = draggable;
+                draggable.classList.add('selected');
+                draggable.style.backgroundColor = 'rgba(59, 130, 246, 0.3)';
+                draggable.style.border = '2px solid #3b82f6';
+                draggable.style.transform = 'scale(1.02)';
 
-            if (isMobile) {
-                // สำหรับมือถือ: ถ้ายังไม่มีตัวที่เลือก ให้เลือกตัวนี้
-                if (!selectedForMove) {
-                    selectedForMove = draggable;
-                    draggable.style.backgroundColor = 'rgba(59, 130, 246, 0.3)';
-                    draggable.style.border = '2px solid #3b82f6';
-                    draggable.style.transform = 'scale(1.02)';
+                showMobileInstruction('แตะที่ตำแหน่งที่ต้องการวาง');
+                return;
+            }
 
-                    showMobileInstruction('แตะที่ตำแหน่งที่ต้องการวาง');
-                    return;
-                }
-
-                // ถ้าคลิกตัวเดิมอีกครั้ง ให้ยกเลิกการเลือก
-                if (selectedForMove === draggable) {
-                    deselectItem();
-                    return;
-                }
+            // ถ้าคลิกตัวเดิมอีกครั้ง ให้ยกเลิกการเลือก
+            if (selectedForMove === draggable) {
+                deselectItem();
+                return;
             }
         });
 
         // Desktop Drag Events
         draggable.addEventListener('dragstart', (e) => {
+            if (window.innerWidth <= 768) {
+                e.preventDefault();
+                return false;
+            }
+            
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/html', draggable.outerHTML);
             e.dataTransfer.setData('text/plain', '');
@@ -580,264 +589,99 @@ function setupDragAndDrop() {
             }
         });
 
-        // Touch Events for Mobile - ปรับปรุงให้ตอบสนองเร็วขึ้น
-        draggable.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-
-            const touch = e.touches[0];
-            const rect = draggable.getBoundingClientRect();
-
-            touchOffset.x = touch.clientX - rect.left;
-            touchOffset.y = touch.clientY - rect.top;
-
-            draggedItem = draggable;
-            originalParent = draggable.parentNode;
-            originalNextSibling = draggable.nextSibling;
-            isDraggingTouch = true;
-
-            // Store original styles
-            draggable.dataset.originalPosition = draggable.style.position || '';
-            draggable.dataset.originalZIndex = draggable.style.zIndex || '';
-            draggable.dataset.originalLeft = draggable.style.left || '';
-            draggable.dataset.originalTop = draggable.style.top || '';
-            draggable.dataset.originalWidth = draggable.style.width || '';
-            draggable.dataset.originalHeight = draggable.style.height || '';
-
-            // Add immediate visual feedback
-            draggable.classList.add('dragging');
-            draggable.style.position = 'fixed';
-            draggable.style.zIndex = '1000';
-            draggable.style.pointerEvents = 'none';
-            draggable.style.width = rect.width + 'px';
-            draggable.style.height = rect.height + 'px';
-            draggable.style.left = (touch.clientX - touchOffset.x) + 'px';
-            draggable.style.top = (touch.clientY - touchOffset.y) + 'px';
-            draggable.style.transition = 'none';
-
-            // Add to body to ensure proper positioning
-            if (draggable.parentNode !== document.body) {
-                document.body.appendChild(draggable);
-            }
-        }, { passive: false });
-
-        draggable.addEventListener('touchmove', (e) => {
-            if (!isDraggingTouch || !draggedItem) return;
-            e.preventDefault();
-            e.stopPropagation();
-
-            const touch = e.touches[0];
-
-            // Update position immediately
-            if (draggedItem) {
-                draggedItem.style.left = (touch.clientX - touchOffset.x) + 'px';
-                draggedItem.style.top = (touch.clientY - touchOffset.y) + 'px';
-            }
-
-            // Find element below touch point
-            const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
-
-            // Remove all highlights first
-            document.querySelectorAll('.drop-zone').forEach(zone => {
-                zone.classList.remove('highlight');
+        // Mouse events for desktop only
+        if (window.innerWidth > 768) {
+            draggable.addEventListener('mousedown', (e) => {
+                e.preventDefault();
             });
-            document.getElementById('steps-container')?.classList.remove('highlight');
-
-            // Check for drop zone
-            const dropZone = elementBelow?.closest('.drop-zone');
-            if (dropZone && !dropZone.contains(draggedItem)) {
-                dropZone.classList.add('highlight');
-            }
-
-            // Check for steps container
-            const stepsContainer = document.getElementById('steps-container');
-            if (elementBelow === stepsContainer || 
-                (stepsContainer && stepsContainer.contains(elementBelow) && !stepsContainer.contains(draggedItem))) {
-                stepsContainer.classList.add('highlight');
-            }
-        }, { passive: false });
-
-        draggable.addEventListener('touchend', (e) => {
-            if (!isDraggingTouch || !draggedItem) return;
-            e.preventDefault();
-            e.stopPropagation();
-
-            const touch = e.changedTouches[0];
-            const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
-
-            // Reset dragged item style using stored values
-            if (draggedItem) {
-                draggedItem.style.position = draggedItem.dataset.originalPosition || '';
-                draggedItem.style.zIndex = draggedItem.dataset.originalZIndex || '';
-                draggedItem.style.pointerEvents = '';
-                draggedItem.style.left = draggedItem.dataset.originalLeft || '';
-                draggedItem.style.top = draggedItem.dataset.originalTop || '';
-                draggedItem.style.width = draggedItem.dataset.originalWidth || '';
-                draggedItem.style.height = draggedItem.dataset.originalHeight || '';
-                draggedItem.style.transition = '';
-                draggedItem.classList.remove('dragging');
-
-                // Clean up stored data
-                delete draggedItem.dataset.originalPosition;
-                delete draggedItem.dataset.originalZIndex;
-                delete draggedItem.dataset.originalLeft;
-                delete draggedItem.dataset.originalTop;
-                delete draggedItem.dataset.originalWidth;
-                delete draggedItem.dataset.originalHeight;
-            }
-
-            // Remove all highlights
-            document.querySelectorAll('.drop-zone').forEach(zone => {
-                zone.classList.remove('highlight');
-            });
-            document.getElementById('steps-container')?.classList.remove('highlight');
-
-            // Find target drop zone or steps container
-            const dropZone = elementBelow?.closest('.drop-zone');
-            const stepsContainer = document.getElementById('steps-container');
-
-            let dropHandled = false;
-
-            if (dropZone && !dropZone.contains(draggedItem)) {
-                handleDrop(dropZone);
-                dropHandled = true;
-            } else if (elementBelow === stepsContainer || 
-                      (stepsContainer && stepsContainer.contains(elementBelow) && !stepsContainer.contains(draggedItem))) {
-                handleDropToSteps();
-                dropHandled = true;
-            }
-
-            // If drop wasn't handled, return to original position
-            if (!dropHandled && originalParent) {
-                if (originalNextSibling && originalParent.contains(originalNextSibling)) {
-                    originalParent.insertBefore(draggedItem, originalNextSibling);
-                } else {
-                    originalParent.appendChild(draggedItem);
-                }
-            }
-
-            isDraggingTouch = false;
-            draggedItem = null;
-            originalParent = null;
-            originalNextSibling = null;
-        }, { passive: false });
+        }
     });
 
-    // Desktop drop events and mobile click events
+    // Desktop drop events
     dropZones.forEach(dropZone => {
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            dropZone.classList.add('highlight');
-        });
+        if (window.innerWidth > 768) {
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                dropZone.classList.add('highlight');
+            });
 
-        dropZone.addEventListener('dragenter', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('highlight');
-        });
+            dropZone.addEventListener('dragenter', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('highlight');
+            });
 
-        dropZone.addEventListener('dragleave', (e) => {
-            // Only remove highlight if we're leaving the dropZone completely
-            if (!dropZone.contains(e.relatedTarget)) {
+            dropZone.addEventListener('dragleave', (e) => {
+                if (!dropZone.contains(e.relatedTarget)) {
+                    dropZone.classList.remove('highlight');
+                }
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 dropZone.classList.remove('highlight');
-            }
-        });
 
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dropZone.classList.remove('highlight');
+                if (draggedItem) {
+                    handleDrop(dropZone);
+                }
+            });
+        }
 
-            if (draggedItem) {
-                handleDrop(dropZone);
-            }
-        });
-
-        // Mobile click support - ปรับปรุงให้ทำงานง่ายขึ้น
+        // Mobile click support
         dropZone.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
 
-            // ตรวจสอบว่าเป็นการคลิกบนมือถือหรือไม่
-            const isMobile = window.innerWidth <= 768;
-
-            if (isMobile) {
-                // สำหรับมือถือ: ถ้ายังไม่มีตัวที่เลือก ให้เลือกตัวนี้
-                if (!selectedForMove) {
-                    selectedForMove = draggable;
-                    selectedForMove.style.backgroundColor = 'rgba(59, 130, 246, 0.3)';
-                    selectedForMove.style.border = '2px solid #3b82f6';
-                    selectedForMove.style.transform = 'scale(1.02)';
-
-                    showMobileInstruction('แตะที่ตำแหน่งที่ต้องการวาง');
-                    return;
-                }
-
-                // ถ้าคลิกตัวเดิมอีกครั้ง ให้ยกเลิกการเลือก
-                if (selectedForMove === draggable) {
-                    deselectItem();
-                    return;
-                }
+            if (selectedForMove) {
+                // ย้าย selectedForMove ไปยัง dropZone นี้
+                handleMobileDrop(dropZone);
+                deselectItem();
             }
         });
     });
 
-    // Steps container drop events and mobile click events
+    // Steps container drop events
     const stepsContainer = document.getElementById('steps-container');
     if (stepsContainer) {
-        stepsContainer.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            stepsContainer.classList.add('highlight');
-        });
+        if (window.innerWidth > 768) {
+            stepsContainer.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                stepsContainer.classList.add('highlight');
+            });
 
-        stepsContainer.addEventListener('dragenter', (e) => {
-            e.preventDefault();
-            stepsContainer.classList.add('highlight');
-        });
+            stepsContainer.addEventListener('dragenter', (e) => {
+                e.preventDefault();
+                stepsContainer.classList.add('highlight');
+            });
 
-        stepsContainer.addEventListener('dragleave', (e) => {
-            // Only remove highlight if we're leaving the stepsContainer completely
-            if (!stepsContainer.contains(e.relatedTarget)) {
+            stepsContainer.addEventListener('dragleave', (e) => {
+                if (!stepsContainer.contains(e.relatedTarget)) {
+                    stepsContainer.classList.remove('highlight');
+                }
+            });
+
+            stepsContainer.addEventListener('drop', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 stepsContainer.classList.remove('highlight');
-            }
-        });
 
-        stepsContainer.addEventListener('drop', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            stepsContainer.classList.remove('highlight');
+                if (draggedItem) {
+                    handleDropToSteps();
+                }
+            });
+        }
 
-            if (draggedItem) {
-                handleDropToSteps();
-            }
-        });
-
-        // Mobile click support - ปรับปรุงให้ทำงานง่ายขึ้น
+        // Mobile click support
         stepsContainer.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
 
-            // ตรวจสอบว่าเป็นการคลิกบนมือถือหรือไม่
-            const isMobile = window.innerWidth <= 768;
-
-            if (isMobile) {
-                // สำหรับมือถือ: ถ้ายังไม่มีตัวที่เลือก ให้เลือกตัวนี้
-                if (!selectedForMove) {
-                    selectedForMove = draggable;
-                    selectedForMove.style.backgroundColor = 'rgba(59, 130, 246, 0.3)';
-                    selectedForMove.style.border = '2px solid #3b82f6';
-                    selectedForMove.style.transform = 'scale(1.02)';
-
-                    showMobileInstruction('แตะที่ตำแหน่งที่ต้องการวาง');
-                    return;
-                }
-
-                // ถ้าคลิกตัวเดิมอีกครั้ง ให้ยกเลิกการเลือก
-                if (selectedForMove === draggable) {
-                    deselectItem();
-                    return;
-                }
+            if (selectedForMove) {
+                // ส่ง selectedForMove กลับไปยัง steps container
+                handleMobileDropToSteps();
+                deselectItem();
             }
         });
     }
@@ -896,6 +740,25 @@ function handleDropToSteps() {
         }
     });
     document.getElementById('steps-container').appendChild(draggedItem);
+}
+
+// ฟังก์ชันสำหรับ Mobile Drop
+function handleMobileDrop(dropZone) {
+    if (!selectedForMove) return;
+
+    // ใช้ handleDrop function เดิม
+    draggedItem = selectedForMove;
+    handleDrop(dropZone);
+    draggedItem = null;
+}
+
+function handleMobileDropToSteps() {
+    if (!selectedForMove) return;
+
+    // ใช้ handleDropToSteps function เดิม
+    draggedItem = selectedForMove;
+    handleDropToSteps();
+    draggedItem = null;
 }
 
 // --- ฟังก์ชัน Timer ---
@@ -1123,6 +986,7 @@ function deselectItem() {
     if (selectedForMove) {
         selectedForMove.classList.remove('selected');
         selectedForMove.style.backgroundColor = '';
+        selectedForMove.style.border = '';
         selectedForMove.style.transform = '';
         selectedForMove = null;
     }
